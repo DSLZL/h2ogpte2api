@@ -52,7 +52,7 @@ API_KEY=your-secret-key (可选)
 python main.py
 ```
 
-服务将在 `http://localhost:2156` 启动。
+服务将在 `http://localhost:<PORT>` 启动，未设置 `PORT` 时默认使用 `2156`。
 
 ## API 使用
 
