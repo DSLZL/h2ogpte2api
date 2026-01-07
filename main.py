@@ -5,6 +5,7 @@ H2OGPTE to OpenAI API 转换服务
 支持 /v1/models 和 /v1/chat/completions 接口
 """
 import json
+import os
 import uuid
 import time
 from typing import Optional
@@ -28,12 +29,14 @@ from session_manager import SessionManager
 # ============ 应用初始化 ============
 
 session_manager = SessionManager(h2ogpte_client)
+runtime_host = os.getenv("HOST", config.HOST)
+runtime_port = int(os.getenv("PORT", str(config.PORT)))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     print(f"🚀 H2OGPTE to OpenAI API 服务启动")
-    print(f"📡 监听地址: http://{config.HOST}:{config.PORT}")
+    print(f"📡 监听地址: http://{runtime_host}:{runtime_port}")
     print(f"🔗 目标服务: {config.H2OGPTE_BASE_URL}")
     print(f"👤 运行模式: {'Guest (自动凭证)' if config.IS_GUEST else '登录用户'}")
     
@@ -348,7 +351,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app",
-        host=config.HOST,
-        port=config.PORT,
+        host=runtime_host,
+        port=runtime_port,
         reload=True
     )
