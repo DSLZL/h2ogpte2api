@@ -33,8 +33,11 @@ class ModelsResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     """聊天消息"""
-    role: Literal["system", "user", "assistant"]
-    content: str
+    role: str  # 放宽为 str 以接受更多 role 类型 (如 tool)
+    content: Optional[Union[str, List]] = None  # 兼容 string/array/null
+    name: Optional[str] = None  # 某些客户端会发送 name 字段
+    tool_calls: Optional[List] = None  # 工具调用
+    tool_call_id: Optional[str] = None  # 工具调用 ID
 
 
 class ChatCompletionRequest(BaseModel):

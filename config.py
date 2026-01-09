@@ -34,6 +34,10 @@ class Config:
     # Reasoning Effort - 推理深度（0 表示不启用手动控制，65000 为最大）
     REASONING_EFFORT: int = int(os.getenv("REASONING_EFFORT", "65000"))
     
+    # 注入提示词
+    SYSTEM_PROMPT_INJECT: str = os.getenv("SYSTEM_PROMPT_INJECT", "")
+
+    
     # 动态凭证（运行时更新）
     _current_session: str = ""
     _current_csrf_token: str = ""

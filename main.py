@@ -175,32 +175,62 @@ async def create_chat_completion(
         raise HTTPException(status_code=401, detail="Invalid API Key")
     
     try:
+        # 辅助函数：从 content 中提取字符串
+        def get_content_str(content) -> str:
+            if content is None:
+                return ""
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                # 处理多模态内容数组
+                parts = []
+                for item in content:
+                    if isinstance(item, str):
+                        parts.append(item)
+                    elif isinstance(item, dict):
+                        if item.get("type") == "text":
+                            parts.append(item.get("text", ""))
+                return "".join(parts)
+            return str(content)
+        
         # 提取系统提示词并构建完整的对话上下文
         system_prompt = None
         conversation_parts = []
         
         for msg in request.messages:
+            content_str = get_content_str(msg.content)
             if msg.role == "system":
-                system_prompt = msg.content
+                system_prompt = content_str
             elif msg.role == "user":
-                conversation_parts.append(f"User: {msg.content}")
+                if content_str:
+                    conversation_parts.append(f"User: {content_str}")
             elif msg.role == "assistant":
-                conversation_parts.append(f"Assistant: {msg.content}")
+                if content_str:
+                    conversation_parts.append(f"Assistant: {content_str}")
+        
+        # 注入系统提示词
+        if config.SYSTEM_PROMPT_INJECT:
+            if system_prompt:
+                system_prompt = config.SYSTEM_PROMPT_INJECT + "\n\n" + system_prompt
+            else:
+                system_prompt = config.SYSTEM_PROMPT_INJECT
+
         
         # 将对话历史拼接成完整的消息
         # 如果只有一条用户消息，直接使用；否则拼接完整上下文
         if len(conversation_parts) == 1:
-            user_message = request.messages[-1].content if request.messages else ""
+            user_message = get_content_str(request.messages[-1].content) if request.messages else ""
         else:
             # 拼接对话历史，添加最终的提示
             user_message = "\n".join(conversation_parts)
             # 如果最后不是用户消息，添加提示
-            if not user_message.endswith(conversation_parts[-1]):
+            if conversation_parts and not user_message.endswith(conversation_parts[-1]):
                 user_message += "\nAssistant:"
         
         # 如果没有用户消息，使用最后一条消息
         if not user_message and request.messages:
-            user_message = request.messages[-1].content
+            user_message = get_content_str(request.messages[-1].content)
+
         
         # 从会话池获取聊天会话
         chat_id = await session_manager.get_session()
