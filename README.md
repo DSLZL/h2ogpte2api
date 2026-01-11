@@ -7,9 +7,10 @@
 - ✅ `/v1/models` - 获取可用模型列表
 - ✅ `/v1/chat/completions` - 聊天补全接口（支持流式和非流式）
 - ✅ 会话池 (Session Pool) - 后台自动管理和预热会话，提升响应速度
-- ✅ 自动凭据管理 - 支持 Guest 用户自动获取和续期凭据
 - ✅ 标准 OpenAI API 格式响应
 - ✅ CORS 支持
+
+> ⚠️ **注意**：当前仅支持**登录模式**，访客 (Guest) 模式暂不可用。
 
 ## 快速开始
 
@@ -31,11 +32,11 @@ cp .env.example .env
 
 ```env
 H2OGPTE_BASE_URL=https://h2ogpte.genai.h2o.ai
-IS_GUEST=true (默认为 true,若为true,以下不填)
-H2OGPTE_SESSION=your-session-id-here (如果 IS_GUEST 为 false 则必填)
-H2OGPTE_CSRF_TOKEN=your-csrf-token-here (如果 IS_GUEST 为 false 则必填)
-H2OGPTE_WORKSPACE_ID=workspaces/your-uuid-here (workspaces/h2ogpte-guest或用户自定义的uuid)
-H2OGPTE_PROMPT_TEMPLATE_ID=your-prompt-template-uuid (可选，若为guest模式则必须置空)
+IS_GUEST=false
+H2OGPTE_SESSION=your-session-id-here (必填)
+H2OGPTE_CSRF_TOKEN=your-csrf-token-here (必填)
+H2OGPTE_WORKSPACE_ID=workspaces/your-uuid-here (用户自定义的uuid)
+H2OGPTE_PROMPT_TEMPLATE_ID=your-prompt-template-uuid (可选)
 API_KEY=your-secret-key (可选)
 ```
 
@@ -115,7 +116,7 @@ h2ogpt2api/
 
 ## 注意事项
 
-1. **Session & 凭据**：程序支持自动管理 Guest 凭据。对于登录用户，建议定期更新 Session ID。
-2. **会自动续期**：Guest 模式下，程序会自动检测 401 错误并尝试重新获取凭据。
+1. **仅登录模式可用**：当前访客 (Guest) 模式不可用，必须使用登录用户的凭据。
+2. **Session & 凭据**：建议定期更新 Session ID 以保持连接有效。
 3. **请求限制**：请注意 H2OGPTE 服务的请求频率限制。
 4. **安全性**：建议在 `.env` 中设置 `API_KEY` 以启用基础验证。
