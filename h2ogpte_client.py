@@ -29,6 +29,9 @@ class H2OGPTEClient:
     _refresh_lock: Optional[asyncio.Lock] = None
     _refreshing: bool = False
     
+    # 类级别的 HTTP 客户端，复用连接
+    _http_client: Optional[httpx.AsyncClient] = None
+    
     def __init__(self):
         self.base_url = config.H2OGPTE_BASE_URL
         self.rpc_db_endpoint = f"{self.base_url}/rpc/db"
@@ -52,6 +55,26 @@ class H2OGPTEClient:
     def _get_cookie_header(self) -> str:
         """获取 Cookie 头字符串"""
         return "; ".join([f"{k}={v}" for k, v in self.cookies.items()])
+    
+    @classmethod
+    async def get_http_client(cls) -> httpx.AsyncClient:
+        """获取共享的 HTTP 客户端（连接池）"""
+        if cls._http_client is None or cls._http_client.is_closed:
+            cls._http_client = httpx.AsyncClient(
+                timeout=60.0,
+                limits=httpx.Limits(
+                    max_connections=100,
+                    max_keepalive_connections=20
+                )
+            )
+        return cls._http_client
+    
+    @classmethod
+    async def close(cls):
+        """关闭 HTTP 客户端连接池"""
+        if cls._http_client and not cls._http_client.is_closed:
+            await cls._http_client.aclose()
+            cls._http_client = None
     
     async def _ensure_credentials(self) -> bool:
         """确保有有效的凭证"""
@@ -111,42 +134,39 @@ class H2OGPTEClient:
         await self._ensure_credentials()
         
         payload = json.dumps([method, *args])
+        client = await self.get_http_client()
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.rpc_db_endpoint,
-                headers=self.headers,
-                cookies=self.cookies,
-                content=payload,
-                timeout=60.0
-            )
-            
-            # 401 错误：凭证失效，尝试续期
-            if response.status_code == 401:
-                print("检测到 401 Unauthorized，正在刷新凭证...")
-                if await self._refresh_credentials():
-                    response = await client.post(
-                        self.rpc_db_endpoint,
-                        headers=self.headers,
-                        cookies=self.cookies,
-                        content=payload,
-                        timeout=60.0
-                    )
-            
-            # 429 错误：配额耗尽，获取新 Guest（仅 Guest 模式）
-            if response.status_code == 429 and config.IS_GUEST:
-                print("检测到 429 Too Many Requests，Guest 配额耗尽，正在获取新 Guest...")
-                if await self._refresh_credentials(force_new=True):
-                    response = await client.post(
-                        self.rpc_db_endpoint,
-                        headers=self.headers,
-                        cookies=self.cookies,
-                        content=payload,
-                        timeout=60.0
-                    )
-            
-            response.raise_for_status()
-            return response.json()
+        response = await client.post(
+            self.rpc_db_endpoint,
+            headers=self.headers,
+            cookies=self.cookies,
+            content=payload
+        )
+        
+        # 401 错误：凭证失效，尝试续期
+        if response.status_code == 401:
+            print("检测到 401 Unauthorized，正在刷新凭证...")
+            if await self._refresh_credentials():
+                response = await client.post(
+                    self.rpc_db_endpoint,
+                    headers=self.headers,
+                    cookies=self.cookies,
+                    content=payload
+                )
+        
+        # 429 错误：配额耗尽，获取新 Guest（仅 Guest 模式）
+        if response.status_code == 429 and config.IS_GUEST:
+            print("检测到 429 Too Many Requests，Guest 配额耗尽，正在获取新 Guest...")
+            if await self._refresh_credentials(force_new=True):
+                response = await client.post(
+                    self.rpc_db_endpoint,
+                    headers=self.headers,
+                    cookies=self.cookies,
+                    content=payload
+                )
+        
+        response.raise_for_status()
+        return response.json()
     
     # ============ 模型相关 ============
     
@@ -213,42 +233,39 @@ class H2OGPTEClient:
         await self._ensure_credentials()
         
         payload = json.dumps([method, params])
+        client = await self.get_http_client()
         
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/rpc/job",
-                headers=self.headers,
-                cookies=self.cookies,
-                content=payload,
-                timeout=60.0
-            )
-            
-            # 401 错误：凭证失效，尝试续期
-            if response.status_code == 401:
-                print("检测到 401 Unauthorized，正在刷新凭证...")
-                if await self._refresh_credentials():
-                    response = await client.post(
-                        f"{self.base_url}/rpc/job",
-                        headers=self.headers,
-                        cookies=self.cookies,
-                        content=payload,
-                        timeout=60.0
-                    )
-            
-            # 429 错误：配额耗尽，获取新 Guest（仅 Guest 模式）
-            if response.status_code == 429 and config.IS_GUEST:
-                print("检测到 429 Too Many Requests，Guest 配额耗尽，正在获取新 Guest...")
-                if await self._refresh_credentials(force_new=True):
-                    response = await client.post(
-                        f"{self.base_url}/rpc/job",
-                        headers=self.headers,
-                        cookies=self.cookies,
-                        content=payload,
-                        timeout=60.0
-                    )
-            
-            response.raise_for_status()
-            return response.json()
+        response = await client.post(
+            f"{self.base_url}/rpc/job",
+            headers=self.headers,
+            cookies=self.cookies,
+            content=payload
+        )
+        
+        # 401 错误：凭证失效，尝试续期
+        if response.status_code == 401:
+            print("检测到 401 Unauthorized，正在刷新凭证...")
+            if await self._refresh_credentials():
+                response = await client.post(
+                    f"{self.base_url}/rpc/job",
+                    headers=self.headers,
+                    cookies=self.cookies,
+                    content=payload
+                )
+        
+        # 429 错误：配额耗尽，获取新 Guest（仅 Guest 模式）
+        if response.status_code == 429 and config.IS_GUEST:
+            print("检测到 429 Too Many Requests，Guest 配额耗尽，正在获取新 Guest...")
+            if await self._refresh_credentials(force_new=True):
+                response = await client.post(
+                    f"{self.base_url}/rpc/job",
+                    headers=self.headers,
+                    cookies=self.cookies,
+                    content=payload
+                )
+        
+        response.raise_for_status()
+        return response.json()
     
     async def delete_chat_session(self, session_id: str) -> bool:
         """删除聊天会话"""

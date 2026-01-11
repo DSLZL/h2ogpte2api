@@ -54,6 +54,8 @@ async def lifespan(app: FastAPI):
     yield
     print("👋 正在停止会话池...")
     await session_manager.stop()
+    print("🔌 正在关闭 HTTP 连接池...")
+    await h2ogpte_client.close()
     print("👋 服务关闭")
 
 
