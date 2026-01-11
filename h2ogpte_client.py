@@ -282,6 +282,37 @@ class H2OGPTEClient:
             print(f"删除聊天会话失败: {e}")
             return False
     
+    async def list_all_chat_sessions(self, limit: int = 1000) -> List[str]:
+        """列出当前用户的所有聊天会话 ID"""
+        try:
+            result = await self._rpc_db(
+                "list_recent_chat_sessions_filter_with_type",
+                0, limit, "current_user", ""
+            )
+            if isinstance(result, dict) and "items" in result:
+                return [item["id"] for item in result.get("items", [])]
+            return []
+        except Exception as e:
+            print(f"获取会话列表失败: {e}")
+            return []
+    
+    async def delete_all_chat_sessions(self) -> int:
+        """删除所有聊天会话，返回删除数量"""
+        session_ids = await self.list_all_chat_sessions()
+        if session_ids:
+            try:
+                await self._rpc_job(
+                    "q:crawl_quick.DeleteChatSessionsJob",
+                    {
+                        "name": "Deleting All Sessions",
+                        "chat_session_ids": session_ids
+                    }
+                )
+            except Exception as e:
+                print(f"批量删除会话失败: {e}")
+                return 0
+        return len(session_ids)
+    
     # ============ WebSocket 聊天 ============
     
     async def send_message(

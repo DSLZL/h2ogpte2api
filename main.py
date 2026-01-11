@@ -49,6 +49,11 @@ async def lifespan(app: FastAPI):
         else:
             print("⚠ 凭证初始化失败，将在首次请求时重试")
     
+    # 清除遗留会话
+    print("🧹 正在清除遗留会话...")
+    deleted = await h2ogpte_client.delete_all_chat_sessions()
+    print(f"✓ 已清除 {deleted} 个遗留会话")
+    
     print(f"🔄 启动会话池管理器...")
     await session_manager.start()
     yield
