@@ -227,6 +227,99 @@ class CredentialStore:
             print(f"续期失败: {e}")
             return None
     
+    async def renew_session_with_credential(self, session: str) -> Optional[StoredCredential]:
+        """
+        使用指定的 session 进行续期（登录模式专用）
+        
+        Args:
+            session: 要续期的 session cookie 值
+        
+        Returns:
+            更新后的凭证，如果失败返回 None
+        """
+        import httpx
+        import re
+        import json as json_module
+        
+        if not session:
+            print("没有提供 session，无法续期")
+            return None
+        
+        print("正在续期登录用户的 session...")
+        
+        try:
+            headers = {
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            cookies = {
+                "h2ogpte.session": session
+            }
+            
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(
+                    "https://h2ogpte.genai.h2o.ai/chats",
+                    headers=headers,
+                    cookies=cookies,
+                    timeout=30.0
+                )
+                
+                if response.status_code != 200:
+                    print(f"续期请求失败: {response.status_code}")
+                    return None
+                
+                # 尝试从响应或重定向历史获取新的 session
+                new_session = None
+                for r in [response] + list(response.history):
+                    for header in r.headers.get_list("set-cookie"):
+                        if "h2ogpte.session=" in header:
+                            match = re.search(r'h2ogpte\.session=([^;]+)', header)
+                            if match:
+                                new_session = match.group(1)
+                                break
+                    if new_session:
+                        break
+                
+                # 如果没有新 session，继续使用旧的
+                if not new_session:
+                    new_session = session
+                
+                # 提取新的 csrf_token
+                html = response.text
+                start_marker = "data-conf='"
+                start = html.find(start_marker)
+                if start >= 0:
+                    start += len(start_marker)
+                    end = html.find("'", start)
+                    if end > start:
+                        config_json = html[start:end]
+                        try:
+                            config_data = json_module.loads(config_json)
+                            new_csrf = config_data.get("csrf_token", "")
+                            new_user_id = config_data.get("user_id", "")
+                            new_username = config_data.get("username", "")
+                            
+                            # 登录模式：只更新内存，不持久化
+                            self._credential = StoredCredential(
+                                session=new_session,
+                                csrf_token=new_csrf,
+                                user_id=new_user_id,
+                                username=new_username,
+                                created_at=datetime.now().isoformat(),
+                                last_used_at=datetime.now().isoformat()
+                            )
+                            print(f"续期成功: {new_username}")
+                            return self._credential
+                        except json_module.JSONDecodeError:
+                            pass
+                
+                print("续期失败: 无法解析新 token")
+                return None
+                
+        except Exception as e:
+            print(f"续期失败: {e}")
+            return None
+    
     async def refresh_credential(self) -> Optional[StoredCredential]:
         """
         获取全新的 Guest 凭证（新账号）

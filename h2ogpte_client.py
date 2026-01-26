@@ -112,19 +112,30 @@ class H2OGPTEClient:
             
             from credential_store import credential_store
             
-            if not force_new:
-                # 优先尝试续期当前账号（保持同一账号，利用现有额度）
-                cred = await credential_store.renew_session()
-                if cred:
-                    config.update_credentials(cred.session, cred.csrf_token)
-                    return True
-            
-            # Guest 模式：续期失败则获取新 Guest
             if config.IS_GUEST:
+                # Guest 模式逻辑
+                if not force_new:
+                    # 优先尝试续期当前账号（保持同一账号，利用现有额度）
+                    cred = await credential_store.renew_session()
+                    if cred:
+                        config.update_credentials(cred.session, cred.csrf_token)
+                        return True
+                
+                # 续期失败则获取新 Guest
                 cred = await credential_store.refresh_credential()
                 if cred:
                     config.update_credentials(cred.session, cred.csrf_token)
                     return True
+            else:
+                # 登录模式：使用当前配置中的凭证续期
+                current_session = config._H2OGPTE_SESSION or config._current_session
+                if current_session:
+                    cred = await credential_store.renew_session_with_credential(current_session)
+                    if cred:
+                        config.update_credentials(cred.session, cred.csrf_token)
+                        return True
+                else:
+                    print("登录模式没有可用的 session，无法续期")
             
             return False
     
@@ -176,7 +187,7 @@ class H2OGPTEClient:
         return [
             {"id": "auto", "name": "Autoselect LLM"},
             {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
-            {"id": "claude-3-7-sonnet", "name": "Claude 3.7 Sonnet"},
+            {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet"},
             {"id": "claude-opus-4-1-20250805", "name": "Claude Opus 4.1"},
             {"id": "deepseek-ai/DeepSeek-R1", "name": "DeepSeek R1"},
             {"id": "deepseek-ai/DeepSeek-V3", "name": "DeepSeek V3"},
