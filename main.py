@@ -257,17 +257,18 @@ async def create_chat_completion(
             )
         else:
             # 非流式响应
-            response_content = await h2ogpte_client.send_message(
-                message=user_message,
-                chat_id=chat_id,
-                model=request.model,
-                system_prompt=system_prompt,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens
-            )
-            
-            # 回收聊天会话
-            await session_manager.recycle_session(chat_id)
+            try:
+                response_content = await h2ogpte_client.send_message(
+                    message=user_message,
+                    chat_id=chat_id,
+                    model=request.model,
+                    system_prompt=system_prompt,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens
+                )
+            finally:
+                # 无论成功或失败，都回收会话
+                await session_manager.recycle_session(chat_id)
             
             completion_id = generate_completion_id()
             
@@ -362,6 +363,10 @@ async def stream_chat_completion(
         )
         yield f"data: {error_chunk.model_dump_json()}\n\n"
     
+    finally:
+        # 无论成功或失败，都回收会话
+        await session_manager.recycle_session(chat_id)
+    
     # 发送结束信号
     final_chunk = ChatCompletionChunk(
         id=completion_id,
@@ -377,9 +382,6 @@ async def stream_chat_completion(
     )
     yield f"data: {final_chunk.model_dump_json()}\n\n"
     yield "data: [DONE]\n\n"
-    
-    # 回收聊天会话
-    await session_manager.recycle_session(chat_id)
 
 
 # ============ 启动入口 ============
